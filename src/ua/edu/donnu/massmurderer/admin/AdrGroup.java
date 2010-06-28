@@ -109,8 +109,22 @@ public class AdrGroup implements Externalizable {
         }
     }
 
+    /**
+     * getting current group name
+     * @since 1.0
+     * @return group's name
+     */
     public String getName() {
         return sName;
+    }
+
+    /**
+     * adding address to group
+     * @since 1.0
+     * @param jnAdr ipv4 address to add
+     */
+    public void addAddress(InetAddress jnAdr) {
+        this.jlAddr.add(jnAdr);
     }
 
     /**
