@@ -26,9 +26,13 @@ package ua.edu.donnu.massmurderer.admin;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.File;
+import java.io.FileFilter;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.Inet4Address;
@@ -51,6 +55,7 @@ import javax.swing.UIManager;
 import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
 import ua.edu.donnu.massmurderer.admin.models.ConnListModel;
+import ua.edu.donnu.massmurderer.admin.models.GroupsModel;
 import ua.edu.donnu.massmurderer.admin.models.IpListModel;
 import ua.edu.donnu.massmurderer.common.Connection;
 import ua.edu.donnu.massmurderer.common.ConnectionListener;
@@ -131,7 +136,7 @@ public class MurderConsole extends JFrame implements ListDataListener, ServerLis
      * end of address list
      */
     private static final String EOLIST = "#";
-        /**
+    /**
      * request parts delimiter
      */
     public static final String REQ_CMDDELIM = ":";
@@ -139,6 +144,10 @@ public class MurderConsole extends JFrame implements ListDataListener, ServerLis
      * specific symbol to mark all addresses
      */
     public static final String REQ_ALLMASK = "*";
+    /**
+     * groups file extension
+     */
+    public static final String FL_GRPEXT = ".grp";
     // </editor-fold>
     // <editor-fold defaultstate="collapsed" desc="default values">
     /**
@@ -240,6 +249,10 @@ public class MurderConsole extends JFrame implements ListDataListener, ServerLis
      * agent.jar content
      */
     private FileRecord jFileInfoPlus = null;
+    /**
+     * groups combobox datamodel
+     */
+    private GroupsModel cmGroups = new GroupsModel();
 
     /**
      * configuring admin module
@@ -271,6 +284,7 @@ public class MurderConsole extends JFrame implements ListDataListener, ServerLis
         // <editor-fold defaultstate="collapsed" desc="loading latest agent">
         jFileInfoPlus = new FileRecord(new File(joConfiguration.getProperty(CFGS_LATESTJAR)));
         // </editor-fold>
+        loadGroups();
     }
 
     /**
@@ -282,6 +296,17 @@ public class MurderConsole extends JFrame implements ListDataListener, ServerLis
     protected void getListAvailables() throws SocketException, UnknownHostException, IOException, Exception {
         lmModel.clearAll(true);
         DatagramConnection.send(new Message(Message.MessageType.ECHO, Integer.parseInt(joConfiguration.getProperty(CFGS_SRVPORT))), (Inet4Address) InetAddress.getByName(BRD_ALL), Integer.parseInt(joConfiguration.getProperty(CFGS_PORT)));
+    }
+
+    protected void loadGroups() throws FileNotFoundException, IOException, ClassNotFoundException {
+        cmGroups.addElement(new AdrGroup(" "));
+        File[] arFiles = new File(System.getProperty("user.dir")).listFiles((FileFilter) new GFileFilter(FL_GRPEXT));
+        for (File f : arFiles) {
+            ObjectInputStream srOIn = new ObjectInputStream(new FileInputStream(f));
+            Object oObj = srOIn.readObject();
+            AdrGroup uGroup = (AdrGroup) oObj;
+            cmGroups.addElement(uGroup);
+        }
     }
 
     /**
@@ -370,8 +395,10 @@ public class MurderConsole extends JFrame implements ListDataListener, ServerLis
         bRefresh = new javax.swing.JButton();
         bSelAll = new javax.swing.JButton();
         bDeselAll = new javax.swing.JButton();
+        bSaveAsGrp = new javax.swing.JButton();
         pTop = new javax.swing.JPanel();
         bCustNet = new javax.swing.JButton();
+        cbGroups = new javax.swing.JComboBox();
         bRest = new javax.swing.JButton();
         bKill = new javax.swing.JButton();
         bAbout = new javax.swing.JButton();
@@ -383,7 +410,7 @@ public class MurderConsole extends JFrame implements ListDataListener, ServerLis
         lReqLab = new javax.swing.JLabel();
         lSendTo = new javax.swing.JLabel();
         jScrollPane1 = new javax.swing.JScrollPane();
-        jList1 = new javax.swing.JList();
+        liConnections = new javax.swing.JList();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
         setTitle(joLocalization.getString("ttlMain"));
@@ -446,6 +473,15 @@ public class MurderConsole extends JFrame implements ListDataListener, ServerLis
         });
         pBottom.add(bDeselAll);
 
+        bSaveAsGrp.setText(joLocalization.getString("bSaveAsGrp"));
+        bSaveAsGrp.setEnabled(false);
+        bSaveAsGrp.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                bSaveAsGrpActionPerformed(evt);
+            }
+        });
+        pBottom.add(bSaveAsGrp);
+
         getContentPane().add(pBottom, java.awt.BorderLayout.SOUTH);
 
         pTop.setMinimumSize(new java.awt.Dimension(379, 35));
@@ -460,6 +496,15 @@ public class MurderConsole extends JFrame implements ListDataListener, ServerLis
             }
         });
         pTop.add(bCustNet);
+
+        cbGroups.setModel(cmGroups);
+        cbGroups.setRenderer(new GroupRenderer());
+        cbGroups.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                cbGroupsActionPerformed(evt);
+            }
+        });
+        pTop.add(cbGroups);
 
         bRest.setText(joLocalization.getString("bSendRest"));
         bRest.setToolTipText(joLocalization.getString("tpApply"));
@@ -535,14 +580,14 @@ public class MurderConsole extends JFrame implements ListDataListener, ServerLis
 
         pData.add(pLabels, java.awt.BorderLayout.SOUTH);
 
-        jList1.setModel(lmModel);
-        jList1.setCellRenderer(new ConnRenderer());
-        jList1.addListSelectionListener(new javax.swing.event.ListSelectionListener() {
+        liConnections.setModel(lmModel);
+        liConnections.setCellRenderer(new ConnRenderer());
+        liConnections.addListSelectionListener(new javax.swing.event.ListSelectionListener() {
             public void valueChanged(javax.swing.event.ListSelectionEvent evt) {
-                jList1ValueChanged(evt);
+                liConnectionsValueChanged(evt);
             }
         });
-        jScrollPane1.setViewportView(jList1);
+        jScrollPane1.setViewportView(liConnections);
 
         pData.add(jScrollPane1, java.awt.BorderLayout.CENTER);
 
@@ -571,7 +616,7 @@ public class MurderConsole extends JFrame implements ListDataListener, ServerLis
      */
     protected void sendCmd(Message.MessageType jType) {
         if (cbActivatePrecise.isSelected()) {
-            Object[] jSelected = jList1.getSelectedValues();
+            Object[] jSelected = liConnections.getSelectedValues();
             for (int i = 0; i < jSelected.length; i++) {
                 ((Connection) jSelected[i]).send(new Message(jType));
             }
@@ -623,11 +668,11 @@ public class MurderConsole extends JFrame implements ListDataListener, ServerLis
     }//GEN-LAST:event_bRefreshActionPerformed
 
     private void bSelAllActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_bSelAllActionPerformed
-        jList1.setSelectionInterval(0, lmModel.getSize() - 1);
+        liConnections.setSelectionInterval(0, lmModel.getSize() - 1);
     }//GEN-LAST:event_bSelAllActionPerformed
 
     private void bDeselAllActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_bDeselAllActionPerformed
-        jList1.removeSelectionInterval(0, lmModel.getSize());
+        liConnections.removeSelectionInterval(0, lmModel.getSize());
     }//GEN-LAST:event_bDeselAllActionPerformed
 
     /**
@@ -635,8 +680,8 @@ public class MurderConsole extends JFrame implements ListDataListener, ServerLis
      * @return request string lines
      */
     protected String generateRequest() {
-        if (!jList1.isSelectionEmpty()) {
-            Object[] oSelected = jList1.getSelectedValues();
+        if (!liConnections.isSelectionEmpty()) {
+            Object[] oSelected = liConnections.getSelectedValues();
             ArrayList jAl = new ArrayList(Arrays.asList(oSelected));
             String sResult = "";
             if (oSelected.length > MurderConsole.lmModel.getSize() - oSelected.length) {
@@ -659,19 +704,57 @@ public class MurderConsole extends JFrame implements ListDataListener, ServerLis
         }
     }
 
-    private void jList1ValueChanged(javax.swing.event.ListSelectionEvent evt) {//GEN-FIRST:event_jList1ValueChanged
+    private void liConnectionsValueChanged(javax.swing.event.ListSelectionEvent evt) {//GEN-FIRST:event_liConnectionsValueChanged
         lRequest.setText(generateRequest());
         lSendTo.setText(BRD_ALL);
-    }//GEN-LAST:event_jList1ValueChanged
+    }//GEN-LAST:event_liConnectionsValueChanged
 
     private void cbActivatePreciseActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_cbActivatePreciseActionPerformed
-        jList1.setEnabled(cbActivatePrecise.isSelected());
+        liConnections.setEnabled(cbActivatePrecise.isSelected());
         bRefresh.setEnabled(cbActivatePrecise.isSelected());
+        bSaveAsGrp.setEnabled(cbActivatePrecise.isSelected());
     }//GEN-LAST:event_cbActivatePreciseActionPerformed
 
     private void formWindowClosed(java.awt.event.WindowEvent evt) {//GEN-FIRST:event_formWindowClosed
         lmModel.clearAll(true);
     }//GEN-LAST:event_formWindowClosed
+
+    private void cbGroupsActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_cbGroupsActionPerformed
+        try {
+            ((AdrGroup) cbGroups.getSelectedItem()).applyGroup(liConnections);
+        } catch (Exception ex) {
+            Logger.getLogger(MurderConsole.class.getName()).log(Level.SEVERE, null, ex);
+        }
+    }//GEN-LAST:event_cbGroupsActionPerformed
+
+    private void bSaveAsGrpActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_bSaveAsGrpActionPerformed
+        if (!liConnections.isSelectionEmpty()) {
+            ObjectOutputStream srOOut = null;
+
+            String sName = JOptionPane.showInputDialog(this, joLocalization.getString("msgNameRequest"), joLocalization.getString("dlgRequest"), JOptionPane.INFORMATION_MESSAGE);
+            AdrGroup uGroup = new AdrGroup(sName);
+            for (Object oConn : liConnections.getSelectedValues()) {
+                uGroup.addAddress(((Connection) oConn).getRemoteAddress());
+            }
+            // <editor-fold defaultstate="collapsed" desc="saving group">
+            try {
+                srOOut = new ObjectOutputStream(new FileOutputStream(String.valueOf(System.currentTimeMillis()) + FL_GRPEXT));
+                srOOut.writeObject(uGroup);
+                srOOut.close();
+                cmGroups.addElement(uGroup);
+            } catch (IOException ex) {
+                JOptionPane.showMessageDialog(this, ex.getLocalizedMessage(), joLocalization.getString("dlgError"), JOptionPane.ERROR_MESSAGE);
+            } finally {
+                try {
+                    srOOut.close();
+                } catch (IOException ex) {
+                    JOptionPane.showMessageDialog(this, ex.getLocalizedMessage(), joLocalization.getString("dlgError"), JOptionPane.ERROR_MESSAGE);
+                }
+            }// </editor-fold>
+        } else {
+            JOptionPane.showMessageDialog(this, joLocalization.getString("msgNoAddressSelected"), joLocalization.getString("dlgError"), JOptionPane.WARNING_MESSAGE);
+        }
+    }//GEN-LAST:event_bSaveAsGrpActionPerformed
 
     /**
      * @param args the command line arguments
@@ -692,14 +775,16 @@ public class MurderConsole extends JFrame implements ListDataListener, ServerLis
     private javax.swing.JButton bKill;
     private javax.swing.JButton bRefresh;
     private javax.swing.JButton bRest;
+    private javax.swing.JButton bSaveAsGrp;
     private javax.swing.JButton bSelAll;
     private javax.swing.JCheckBox cbActivatePrecise;
-    private javax.swing.JList jList1;
+    private javax.swing.JComboBox cbGroups;
     private javax.swing.JScrollPane jScrollPane1;
     private javax.swing.JLabel lReqLab;
     private javax.swing.JLabel lRequest;
     private javax.swing.JLabel lSendLab;
     private javax.swing.JLabel lSendTo;
+    private javax.swing.JList liConnections;
     private javax.swing.JPanel pBottom;
     private javax.swing.JPanel pData;
     private javax.swing.JPanel pLabels;
